@@ -1,37 +1,67 @@
 //! # royalflush
 //!
-//! Weekly 75-25 pot bonus distribution with **dual qualification** for the
+//! Weekly **75-25 pot bonus** distribution with **dual qualification** for the
 //! Royal Flush Network.
+//!
+//! This crate is pure domain logic — **no database, no async runtime, no
+//! network**. It does not depend on any other RFN crate. A caller wires it up
+//! by feeding it graduation/cycle events and (optionally) providing a
+//! [`ResetPort`] adapter.
 //!
 //! ## Model
 //!
-//! Every week the pool is split:
-//! - **`profit_sharing_pct`** (default **75%**) is divided **equally** among
-//!   all qualified users. Remainder of the integer division is forfeited.
-//! - **`top_performer_pct`** (default **25%**) goes to the top performers using
-//!   the `top_performer_shares` percentage table (default
-//!   `[40, 30, 20, 10]`), applied left-to-right. Unused slots (fewer top
-//!   performers than shares) are forfeited.
+//! Every week the pool is split (see [`DistributionPolicy`]):
 //!
-//! A user is **qualified** iff they have BOTH at least one flushline
-//! graduation AND at least one matrix cycle, tracked at the *user* level
-//! (a user may own many accounts). Cycles aggregate across all the user's
-//! accounts.
+//! - **75% (default)** → **equal split** among all qualified users. The
+//!   remainder of the integer division is forfeited.
+//! - **25% (default)** → **top performers**, distributed using the
+//!   `top_performer_shares` table (default `[40, 30, 20, 10]`), applied
+//!   left-to-right to the top-ranked users. Unused slots (fewer top performers
+//!   than table entries) are forfeited.
 //!
-//! After distribution, the pool resets to **0** (no rollover) and the tracker
-//! fully resets so users must re-qualify next week.
+//! ## Dual qualification
 //!
-//! ## Tier reset
+//! A user is **qualified** iff they have **both** at least one graduation AND
+//! at least one matrix cycle. Qualification is tracked at the *user* level (a
+//! user may own many accounts; the two requirements may be satisfied by
+//! different accounts). Cycles aggregate across all the user's accounts.
 //!
-//! During distribution, every graduated account of every *qualified* user can
+//! After distribution the pool resets to **0** (no rollover) and the tracker
+//! fully resets, so users must re-qualify for the next week.
+//!
+//! ## Tier reset (integration port)
+//!
+//! During distribution, every graduated account of every *qualified* user may
 //! be reset to King tier via an injectable [`ResetPort`]. royalflush does NOT
-//! depend on flushline — whoever wires the system provides the adapter.
+//! depend on flushline — whoever wires the system provides the adapter. Reset
+//! failures are reported in [`ResetOutcome`] but do not roll back the
+//! distribution.
 //!
-//! ## Events
+//! # Quick start
 //!
-//! There is **no async runtime dependency**. The crate consumes
-//! `FlushlineGraduated` / `MatrixCycled` payloads via explicit methods; it does
-//! not own a channel.
+//! ```
+//! use royalflush::RoyalFlush;
+//! use uuid::Uuid;
+//!
+//! let mut rf = RoyalFlush::new();
+//!
+//! // A user owns an account; qualify them with a graduation + a matrix cycle.
+//! let user = Uuid::now_v7();
+//! let acct = Uuid::now_v7();
+//! rf.register_user_account(user, acct);
+//! rf.record_graduation(acct).unwrap();
+//! rf.record_matrix_cycle(acct, Uuid::now_v7()).unwrap();
+//! assert!(rf.is_user_qualified(&user));
+//!
+//! // Fund the weekly pool and distribute.
+//! rf.add_points(1_000);
+//! let result = rf.distribute_weekly().unwrap();
+//!
+//! // 75% -> 750 to the single qualified user; 25% -> 250 to the top performer.
+//! assert_eq!(result.profit_sharing_for(user), Some(750));
+//! assert_eq!(result.top_cycler_for(user), Some(100)); // 40% of 250
+//! assert_eq!(rf.total_pool_points(), 0); // no rollover
+//! ```
 
 mod pool;
 mod reset;
@@ -57,7 +87,8 @@ impl Default for RoyalFlush {
 }
 
 impl RoyalFlush {
-    /// Create with the default 75/25 + [40,30,20,10] policy.
+    /// Create with the default policy: 75/25 split, top-performer table
+    /// `[40, 30, 20, 10]`, top 4 only.
     pub fn new() -> Self {
         Self {
             pool_points: 0,
@@ -66,7 +97,8 @@ impl RoyalFlush {
         }
     }
 
-    /// Create with a custom policy.
+    /// Create with a custom [`DistributionPolicy`] (e.g. a 50/50 split or a
+    /// single-winner top-performer table).
     pub fn with_policy(policy: DistributionPolicy) -> Self {
         Self {
             pool_points: 0,
@@ -77,7 +109,8 @@ impl RoyalFlush {
 
     // ----- pool & registration ------------------------------------------
 
-    /// Contribute points to the weekly pool.
+    /// Contribute `points` to the weekly pool. Points accumulate until the next
+    /// [`Self::distribute_weekly`] call zeroes the pool.
     pub fn add_points(&mut self, points: u32) {
         self.pool_points += points;
     }
@@ -87,56 +120,80 @@ impl RoyalFlush {
         self.pool_points
     }
 
-    /// Map an account to its owning user.
+    /// Map an `account_id` to its owning `user_id`. A user may own many
+    /// accounts; call this once per account before recording events for it.
     pub fn register_user_account(&mut self, user_id: Uuid, account_id: Uuid) {
         self.tracker.register_user_account(user_id, account_id);
     }
 
     // ----- event ingestion (typed Uuid, no String parsing) --------------
 
-    /// Record a flushline graduation for `account_id`'s owning user.
+    /// Record a flushline graduation for `account_id`'s owning user. This is
+    /// one of the **two** qualification requirements.
+    ///
+    /// Returns `Err` if `account_id` was never registered via
+    /// [`Self::register_user_account`].
     pub fn record_graduation(&mut self, account_id: Uuid) -> Result<(), String> {
         self.tracker.record_graduation(account_id)
     }
 
-    /// Record a matrix cycle for `account_id`'s owning user.
+    /// Record a matrix cycle for `account_id`'s owning user (`matrix_id`
+    /// identifies which matrix cycled). This is one of the **two**
+    /// qualification requirements and also bumps the user's cycle count (used
+    /// for top-performer ranking).
+    ///
+    /// Returns `Err` if `account_id` was never registered via
+    /// [`Self::register_user_account`].
     pub fn record_matrix_cycle(&mut self, account_id: Uuid, matrix_id: Uuid) -> Result<(), String> {
         self.tracker.record_matrix_cycle(account_id, matrix_id)
     }
 
     // ----- queries -------------------------------------------------------
 
+    /// `true` if the user has both a graduation and a matrix cycle on record.
     pub fn is_user_qualified(&self, user_id: &Uuid) -> bool {
         self.tracker.is_user_qualified(user_id)
     }
 
+    /// Total cycles across all the user's accounts (used for ranking).
     pub fn user_cycle_count(&self, user_id: &Uuid) -> u32 {
         self.tracker.user_cycle_count(user_id)
     }
 
+    /// All currently-qualified user ids.
     pub fn qualified_users(&self) -> Vec<Uuid> {
         self.tracker.qualified_users()
     }
 
+    /// Top performers ranked by cycle count (tie-break: graduation count),
+    /// truncated to `limit`. Only qualified users are ranked.
     pub fn top_performers(&self, limit: usize) -> Vec<UserPerformance> {
         self.tracker.top_performers(limit)
     }
 
+    /// All graduated account ids owned by `user_id`.
     pub fn graduated_accounts_for_user(&self, user_id: &Uuid) -> Vec<Uuid> {
         self.tracker.graduated_accounts_for_user(user_id)
     }
 
     // ----- distribution --------------------------------------------------
 
-    /// Run the weekly distribution (no tier reset). Returns the result and
-    /// zeroes the pool + tracker.
+    /// Run the weekly distribution **without** tier reset.
+    ///
+    /// Splits the pool per the policy, zeroes the pool, and fully resets the
+    /// tracker. Returns [`NotEnoughPoints`] only if the pool is empty **and**
+    /// at least one user is qualified (an empty pool with no qualifiers
+    /// succeeds with a zero-distribution result and preserves the pool).
     pub fn distribute_weekly(&mut self) -> Result<DistributionResult, NotEnoughPoints> {
         self.distribute_weekly_with_reset(None::<&mut reset::NullReset>)
             .map(|(r, _)| r)
     }
 
     /// Run the weekly distribution, optionally resetting graduated accounts of
-    /// qualified users via `port`. Returns `(result, reset_outcome)`.
+    /// qualified users via `port`. Pass `None` to skip the reset phase.
+    ///
+    /// Returns `(result, reset_outcome)`. Reset failures are captured in
+    /// [`ResetOutcome::Partial`] but do **not** roll back the distribution.
     pub fn distribute_weekly_with_reset<P>(
         &mut self,
         port: Option<&mut P>,
