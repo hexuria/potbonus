@@ -1,10 +1,10 @@
 //! Tier reset during distribution: only qualified users' graduated accounts
 //! reset, and reset failures do not roll back the distribution.
 //!
-//! The TierResetPort trait is the integration seam; royalflush does NOT
+//! The TierResetPort trait is the integration seam; potbonus does NOT
 //! depend on flushline directly. A mock port exercises the contract.
 
-use royalflush::{ResetOutcome, ResetPort, RoyalFlush};
+use potbonus::{PotBonus, ResetOutcome, ResetPort};
 use std::cell::RefCell;
 use std::collections::HashSet;
 use uuid::Uuid;
@@ -43,7 +43,7 @@ impl ResetPort for MockReset {
     }
 }
 
-fn qualify_with_two_graduated_accounts(rf: &mut RoyalFlush) -> (Uuid, Uuid, Uuid) {
+fn qualify_with_two_graduated_accounts(rf: &mut PotBonus) -> (Uuid, Uuid, Uuid) {
     let user = Uuid::now_v7();
     let grad1 = Uuid::now_v7();
     let grad2 = Uuid::now_v7();
@@ -60,7 +60,7 @@ fn qualify_with_two_graduated_accounts(rf: &mut RoyalFlush) -> (Uuid, Uuid, Uuid
 
 #[test]
 fn distribution_without_reset_port_skips_reset() {
-    let mut rf = RoyalFlush::new();
+    let mut rf = PotBonus::new();
     let (_user, _g1, _g2) = qualify_with_two_graduated_accounts(&mut rf);
     rf.add_points(1000);
 
@@ -72,7 +72,7 @@ fn distribution_without_reset_port_skips_reset() {
 
 #[test]
 fn reset_only_targets_graduated_accounts_of_qualified_users() {
-    let mut rf = RoyalFlush::new();
+    let mut rf = PotBonus::new();
     let (_user, g1, g2) = qualify_with_two_graduated_accounts(&mut rf);
     // An unqualified user's graduated account must NOT be reset.
     let unq_user = Uuid::now_v7();
@@ -98,7 +98,7 @@ fn reset_only_targets_graduated_accounts_of_qualified_users() {
 
 #[test]
 fn distribution_succeeds_even_if_every_reset_fails() {
-    let mut rf = RoyalFlush::new();
+    let mut rf = PotBonus::new();
     let (_user, g1, g2) = qualify_with_two_graduated_accounts(&mut rf);
     rf.add_points(1000);
 

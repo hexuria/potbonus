@@ -1,4 +1,4 @@
-//! # royalflush
+//! # potbonus
 //!
 //! Weekly **75-25 pot bonus** distribution with **dual qualification** for the
 //! Royal Flush Network.
@@ -32,7 +32,7 @@
 //! ## Tier reset (integration port)
 //!
 //! During distribution, every graduated account of every *qualified* user may
-//! be reset to King tier via an injectable [`ResetPort`]. royalflush does NOT
+//! be reset to King tier via an injectable [`ResetPort`]. potbonus does NOT
 //! depend on flushline — whoever wires the system provides the adapter. Reset
 //! failures are reported in [`ResetOutcome`] but do not roll back the
 //! distribution.
@@ -40,10 +40,10 @@
 //! # Quick start
 //!
 //! ```
-//! use royalflush::RoyalFlush;
+//! use potbonus::PotBonus;
 //! use uuid::Uuid;
 //!
-//! let mut rf = RoyalFlush::new();
+//! let mut rf = PotBonus::new();
 //!
 //! // A user owns an account; qualify them with a graduation + a matrix cycle.
 //! let user = Uuid::now_v7();
@@ -74,19 +74,19 @@ pub use tracker::{UserPerformance, UserQualification};
 use uuid::Uuid;
 
 /// The aggregate root: pool + qualification tracker + distribution policy.
-pub struct RoyalFlush {
+pub struct PotBonus {
     pool_points: u32,
     tracker: tracker::UserQualificationTracker,
     policy: DistributionPolicy,
 }
 
-impl Default for RoyalFlush {
+impl Default for PotBonus {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl RoyalFlush {
+impl PotBonus {
     /// Create with the default policy: 75/25 split, top-performer table
     /// `[40, 30, 20, 10]`, top 4 only.
     pub fn new() -> Self {

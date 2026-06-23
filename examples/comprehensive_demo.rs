@@ -6,13 +6,13 @@
 //!
 //! Run with: `cargo run --example comprehensive_demo`
 
-use royalflush::RoyalFlush;
+use potbonus::PotBonus;
 use uuid::Uuid;
 
 fn main() {
-    println!("=== royalflush comprehensive demo ===\n");
+    println!("=== potbonus comprehensive demo ===\n");
 
-    let mut rf = RoyalFlush::new();
+    let mut rf = PotBonus::new();
     let alice = Uuid::now_v7();
     let bob = Uuid::now_v7();
     let charlie = Uuid::now_v7();

@@ -2,12 +2,12 @@
 //! aggregation, top-performer ranking. Ported from rfn's
 //! `UserQualificationTracker` invariants.
 
-use royalflush::{RoyalFlush, UserQualification};
+use potbonus::{PotBonus, UserQualification};
 use uuid::Uuid;
 
 #[test]
 fn user_starts_unqualified() {
-    let rf = RoyalFlush::new();
+    let rf = PotBonus::new();
     let user = Uuid::now_v7();
     let _ = user;
     // No accounts registered -> not qualified.
@@ -16,7 +16,7 @@ fn user_starts_unqualified() {
 
 #[test]
 fn graduation_alone_does_not_qualify() {
-    let mut rf = RoyalFlush::new();
+    let mut rf = PotBonus::new();
     let (user, account) = register_one_account(&mut rf);
 
     rf.record_graduation(account).unwrap();
@@ -28,7 +28,7 @@ fn graduation_alone_does_not_qualify() {
 
 #[test]
 fn matrix_cycle_alone_does_not_qualify() {
-    let mut rf = RoyalFlush::new();
+    let mut rf = PotBonus::new();
     let (user, account) = register_one_account(&mut rf);
     let matrix = Uuid::now_v7();
 
@@ -38,7 +38,7 @@ fn matrix_cycle_alone_does_not_qualify() {
 
 #[test]
 fn dual_qualification_graduation_plus_cycle_qualifies() {
-    let mut rf = RoyalFlush::new();
+    let mut rf = PotBonus::new();
     let (user, account) = register_one_account(&mut rf);
     let matrix = Uuid::now_v7();
 
@@ -50,7 +50,7 @@ fn dual_qualification_graduation_plus_cycle_qualifies() {
 
 #[test]
 fn dual_qualification_can_span_different_accounts_of_same_user() {
-    let mut rf = RoyalFlush::new();
+    let mut rf = PotBonus::new();
     let user = Uuid::now_v7();
     let account_a = Uuid::now_v7();
     let account_b = Uuid::now_v7();
@@ -67,7 +67,7 @@ fn dual_qualification_can_span_different_accounts_of_same_user() {
 
 #[test]
 fn cycle_count_aggregates_across_all_user_accounts() {
-    let mut rf = RoyalFlush::new();
+    let mut rf = PotBonus::new();
     let user = Uuid::now_v7();
     let a = Uuid::now_v7();
     let b = Uuid::now_v7();
@@ -86,8 +86,8 @@ fn cycle_count_aggregates_across_all_user_accounts() {
 
 #[test]
 fn top_performers_rank_by_cycle_count_then_graduation_count() {
-    let mut rf = RoyalFlush::new();
-    let make_user = |rf: &mut RoyalFlush, cycles: u32, grads: u32| -> Uuid {
+    let mut rf = PotBonus::new();
+    let make_user = |rf: &mut PotBonus, cycles: u32, grads: u32| -> Uuid {
         let user = Uuid::now_v7();
         for i in 0..cycles.max(grads) {
             let acct = Uuid::now_v7();
@@ -117,13 +117,13 @@ fn top_performers_rank_by_cycle_count_then_graduation_count() {
 
 #[test]
 fn record_events_for_unregistered_account_errors() {
-    let mut rf = RoyalFlush::new();
+    let mut rf = PotBonus::new();
     let unknown = Uuid::now_v7();
     assert!(rf.record_graduation(unknown).is_err());
     assert!(rf.record_matrix_cycle(unknown, Uuid::now_v7()).is_err());
 }
 
-fn register_one_account(rf: &mut RoyalFlush) -> (Uuid, Uuid) {
+fn register_one_account(rf: &mut PotBonus) -> (Uuid, Uuid) {
     let user = Uuid::now_v7();
     let account = Uuid::now_v7();
     rf.register_user_account(user, account);

@@ -10,10 +10,10 @@
 //!   - Pool resets to 0 after distribution (no rollover).
 //!   - Tracker fully resets after distribution.
 
-use royalflush::{DistributionPolicy, RoyalFlush};
+use potbonus::{DistributionPolicy, PotBonus};
 use uuid::Uuid;
 
-fn qualify_user(rf: &mut RoyalFlush) -> Uuid {
+fn qualify_user(rf: &mut PotBonus) -> Uuid {
     let user = Uuid::now_v7();
     let acct = Uuid::now_v7();
     rf.register_user_account(user, acct);
@@ -24,7 +24,7 @@ fn qualify_user(rf: &mut RoyalFlush) -> Uuid {
 
 #[test]
 fn zero_pool_distribution_errors() {
-    let mut rf = RoyalFlush::new();
+    let mut rf = PotBonus::new();
     let _ = qualify_user(&mut rf);
     let result = rf.distribute_weekly();
     assert!(result.is_err());
@@ -32,7 +32,7 @@ fn zero_pool_distribution_errors() {
 
 #[test]
 fn no_qualified_users_returns_empty_result_and_preserves_pool() {
-    let mut rf = RoyalFlush::new();
+    let mut rf = PotBonus::new();
     rf.add_points(1000);
     let result = rf.distribute_weekly().unwrap();
     assert_eq!(result.total_distributed, 0);
@@ -45,7 +45,7 @@ fn no_qualified_users_returns_empty_result_and_preserves_pool() {
 
 #[test]
 fn single_qualified_user_gets_exact_75_percent_profit_share() {
-    let mut rf = RoyalFlush::new();
+    let mut rf = PotBonus::new();
     let user = qualify_user(&mut rf);
     rf.add_points(1000);
 
@@ -58,7 +58,7 @@ fn single_qualified_user_gets_exact_75_percent_profit_share() {
 
 #[test]
 fn profit_sharing_splits_equally_across_qualified_users() {
-    let mut rf = RoyalFlush::new();
+    let mut rf = PotBonus::new();
     let u1 = qualify_user(&mut rf);
     let u2 = qualify_user(&mut rf);
     let u3 = qualify_user(&mut rf);
@@ -73,7 +73,7 @@ fn profit_sharing_splits_equally_across_qualified_users() {
 
 #[test]
 fn top_performer_split_uses_40_30_20_10_of_the_25_percent_bucket() {
-    let mut rf = RoyalFlush::new();
+    let mut rf = PotBonus::new();
     // 4 qualified users with strictly increasing cycle counts.
     let users: Vec<_> = (0..4).map(|_| qualify_user(&mut rf)).collect();
     // Pump up cycles so the ordering is deterministic.
@@ -103,7 +103,7 @@ fn top_performer_split_uses_40_30_20_10_of_the_25_percent_bucket() {
 
 #[test]
 fn fewer_than_four_top_performers_forfeits_unused_bucket() {
-    let mut rf = RoyalFlush::new();
+    let mut rf = PotBonus::new();
     let u1 = qualify_user(&mut rf);
     let _u2 = qualify_user(&mut rf);
     // u1 cycles more -> rank 1.
@@ -125,7 +125,7 @@ fn fewer_than_four_top_performers_forfeits_unused_bucket() {
 
 #[test]
 fn pool_resets_to_zero_after_distribution() {
-    let mut rf = RoyalFlush::new();
+    let mut rf = PotBonus::new();
     let _ = qualify_user(&mut rf);
     rf.add_points(10_000);
     let _ = rf.distribute_weekly().unwrap();
@@ -134,7 +134,7 @@ fn pool_resets_to_zero_after_distribution() {
 
 #[test]
 fn tracker_resets_after_distribution_allows_requalification_next_week() {
-    let mut rf = RoyalFlush::new();
+    let mut rf = PotBonus::new();
     let user = qualify_user(&mut rf);
     rf.add_points(10_000);
     let _ = rf.distribute_weekly().unwrap();
@@ -153,7 +153,7 @@ fn tracker_resets_after_distribution_allows_requalification_next_week() {
 
 #[test]
 fn custom_policy_changes_split_ratios() {
-    let mut rf = RoyalFlush::with_policy(DistributionPolicy {
+    let mut rf = PotBonus::with_policy(DistributionPolicy {
         profit_sharing_pct: 50, // 50/50 instead of 75/25
         top_performer_pct: 50,
         top_performer_shares: vec![100], // single winner takes all of the 50%

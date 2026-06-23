@@ -5,7 +5,7 @@
 //!
 //! Run with: `cargo run --example edge_cases`
 
-use royalflush::{ResetOutcome, ResetPort, RoyalFlush};
+use potbonus::{PotBonus, ResetOutcome, ResetPort};
 use uuid::Uuid;
 
 struct FailingReset;
@@ -15,7 +15,7 @@ impl ResetPort for FailingReset {
     }
 }
 
-fn qualify(rf: &mut RoyalFlush, cycles: u32) -> Uuid {
+fn qualify(rf: &mut PotBonus, cycles: u32) -> Uuid {
     let user = Uuid::now_v7();
     let acct = Uuid::now_v7();
     rf.register_user_account(user, acct);
@@ -27,10 +27,10 @@ fn qualify(rf: &mut RoyalFlush, cycles: u32) -> Uuid {
 }
 
 fn main() {
-    println!("=== royalflush edge cases ===\n");
+    println!("=== potbonus edge cases ===\n");
 
     // 1. Empty pool with a qualified user -> error.
-    let mut rf = RoyalFlush::new();
+    let mut rf = PotBonus::new();
     let _ = qualify(&mut rf, 1);
     println!(
         "1. empty pool distribution: {:?}",
@@ -38,7 +38,7 @@ fn main() {
     );
 
     // 2. Single qualified user gets both the 75% and the 25% (rank-1 of top-4).
-    let mut rf = RoyalFlush::new();
+    let mut rf = PotBonus::new();
     let only = qualify(&mut rf, 1);
     rf.add_points(1000);
     let result = rf.distribute_weekly().unwrap();
@@ -49,7 +49,7 @@ fn main() {
     );
 
     // 3. Six perfectly-tied users (5 cycles each) -> top-4 deterministic by ranking.
-    let mut rf = RoyalFlush::new();
+    let mut rf = PotBonus::new();
     let users: Vec<_> = (0..6).map(|_| qualify(&mut rf, 5)).collect();
     rf.add_points(1000);
     let result = rf.distribute_weekly().unwrap();
@@ -63,7 +63,7 @@ fn main() {
     );
 
     // 4. Whale (100 cycles) vs normals.
-    let mut rf = RoyalFlush::new();
+    let mut rf = PotBonus::new();
     let n1 = qualify(&mut rf, 1);
     let _n2 = qualify(&mut rf, 1);
     let whale = qualify(&mut rf, 100);
@@ -76,7 +76,7 @@ fn main() {
     );
 
     // 5. No qualified users -> no distribution, pool preserved.
-    let mut rf = RoyalFlush::new();
+    let mut rf = PotBonus::new();
     rf.add_points(1000);
     let result = rf.distribute_weekly().unwrap();
     println!(
@@ -86,7 +86,7 @@ fn main() {
     );
 
     // 6. Reset failure is reported but distribution still completes.
-    let mut rf = RoyalFlush::new();
+    let mut rf = PotBonus::new();
     let _u = qualify(&mut rf, 1);
     rf.add_points(1000);
     let mut failing = FailingReset;

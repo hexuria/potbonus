@@ -1,4 +1,4 @@
-# royalflush
+# potbonus
 
 **Weekly 75-25 pot bonus** distribution with **dual qualification** for the
 Royal Flush Network (RFN).
@@ -36,10 +36,10 @@ Cycles aggregate across all the user's accounts.
 ## Quick start
 
 ```rust
-use royalflush::RoyalFlush;
+use potbonus::PotBonus;
 use uuid::Uuid;
 
-let mut rf = RoyalFlush::new();
+let mut rf = PotBonus::new();
 
 // A user owns an account; qualify them with a graduation + a matrix cycle.
 let user = Uuid::now_v7();
@@ -66,9 +66,9 @@ The split ratios and top-performer table are configurable via
 `DistributionPolicy`:
 
 ```rust
-use royalflush::{DistributionPolicy, RoyalFlush};
+use potbonus::{DistributionPolicy, PotBonus};
 
-let rf = RoyalFlush::with_policy(DistributionPolicy {
+let rf = PotBonus::with_policy(DistributionPolicy {
     profit_sharing_pct: 50,           // 50/50 instead of 75/25
     top_performer_pct: 50,
     top_performer_shares: vec![100],  // single winner takes the whole bucket
@@ -79,12 +79,12 @@ let rf = RoyalFlush::with_policy(DistributionPolicy {
 ## Tier reset (integration port)
 
 During distribution, every graduated account of every qualified user may be
-reset to a lower tier (e.g. King) via an injectable `ResetPort`. royalflush
+reset to a lower tier (e.g. King) via an injectable `ResetPort`. potbonus
 does **NOT** depend on any tier-management crate — whoever wires the system
 provides the adapter:
 
 ```rust
-use royalflush::{ResetOutcome, ResetPort, RoyalFlush};
+use potbonus::{ResetOutcome, ResetPort, PotBonus};
 use uuid::Uuid;
 
 // Your adapter — e.g. one that delegates to your card-progression engine.
@@ -96,7 +96,7 @@ impl ResetPort for TierAdapter {
     }
 }
 
-let mut rf = RoyalFlush::new();
+let mut rf = PotBonus::new();
 // ...qualify users, add_points...
 let mut adapter = TierAdapter;
 let (result, outcome) = rf.distribute_weekly_with_reset(Some(&mut adapter)).unwrap();
@@ -135,6 +135,23 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo test                                # 24 tests
 ```
 
+## WebAssembly (WASM) & WASI Support
+
+`potbonus` is fully compatible with WebAssembly **out of the box**. It supports compilation for both browser environments (Leptos frontend clients) and server-side WASM sandboxes (such as **Leptos Spin** or **Leptos Wasmtime**).
+
+### 1. Browser-Side WebAssembly (`wasm32-unknown-unknown`)
+Pre-configured with `uuid/js` feature enabled, so generating secure `v7` UUIDs requests secure entropy from browser-native JavaScript APIs (`window.crypto.getRandomValues`).
+```bash
+cargo check --target wasm32-unknown-unknown
+```
+
+### 2. Server-Side WASM / WASI (`wasm32-wasip1`)
+Compiles seamlessly to WASI for deployments like Spin and Wasmtime. WASI system calls provide entropy natively.
+```bash
+cargo check --target wasm32-wasip1
+```
+
 ## License
 
 MIT.
+

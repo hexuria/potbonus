@@ -6,7 +6,7 @@
 //!
 //! Run with: `cargo run --example weekly_cycle`
 
-use royalflush::{ResetOutcome, ResetPort, RoyalFlush};
+use potbonus::{PotBonus, ResetOutcome, ResetPort};
 use uuid::Uuid;
 
 /// A reset port that just logs each call. In a real system this would
@@ -24,9 +24,9 @@ impl ResetPort for LoggingReset {
 }
 
 fn main() {
-    println!("=== royalflush weekly cycle simulation ===\n");
+    println!("=== potbonus weekly cycle simulation ===\n");
 
-    let mut rf = RoyalFlush::new();
+    let mut rf = PotBonus::new();
     let mut port = LoggingReset { resets: 0 };
 
     let alice = Uuid::now_v7();

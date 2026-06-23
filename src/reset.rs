@@ -1,4 +1,4 @@
-//! The tier-reset port: the integration seam with flushline. royalflush does
+//! The tier-reset port: the integration seam with flushline. potbonus does
 //! NOT depend on flushline; whoever wires the system provides an adapter that
 //! implements [`ResetPort`].
 
@@ -26,7 +26,7 @@ pub trait ResetPort {
 }
 
 /// A no-op port used to satisfy the `?Sized` bound when callers pass
-/// `None::<&mut T>` to [`crate::RoyalFlush::distribute_weekly_with_reset`].
+/// `None::<&mut T>` to [`crate::PotBonus::distribute_weekly_with_reset`].
 /// Not part of the public API.
 #[doc(hidden)]
 pub struct NullReset;
