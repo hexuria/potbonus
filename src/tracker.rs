@@ -31,8 +31,8 @@ pub struct UserPerformance {
 }
 
 pub(crate) struct UserQualificationTracker {
-    qualifications: HashMap<Uuid, UserQualification>,
-    account_to_user: HashMap<Uuid, Uuid>,
+    pub(crate) qualifications: HashMap<Uuid, UserQualification>,
+    pub(crate) account_to_user: HashMap<Uuid, Uuid>,
 }
 
 impl UserQualificationTracker {

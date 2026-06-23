@@ -67,17 +67,23 @@ mod pool;
 mod reset;
 mod tracker;
 
+#[cfg(feature = "db")]
+pub mod repository;
+
 pub use pool::{DistributionPolicy, DistributionResult};
 pub use reset::{ResetOutcome, ResetPort};
 pub use tracker::{UserPerformance, UserQualification};
+
+#[cfg(feature = "db")]
+pub use repository::{PgPotBonusRepository, PotBonusRepository};
 
 use uuid::Uuid;
 
 /// The aggregate root: pool + qualification tracker + distribution policy.
 pub struct PotBonus {
-    pool_points: u32,
-    tracker: tracker::UserQualificationTracker,
-    policy: DistributionPolicy,
+    pub(crate) pool_points: u32,
+    pub(crate) tracker: tracker::UserQualificationTracker,
+    pub(crate) policy: DistributionPolicy,
 }
 
 impl Default for PotBonus {
