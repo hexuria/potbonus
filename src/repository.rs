@@ -27,17 +27,9 @@ impl PgPotBonusRepository {
     pub fn new(pool: PgPool) -> Self {
         Self { pool }
     }
-}
 
-#[async_trait]
-impl PotBonusRepository for PgPotBonusRepository {
-    async fn load(&self) -> Result<PotBonus, String> {
-        let mut conn = self
-            .pool
-            .acquire()
-            .await
-            .map_err(|e| format!("Failed to acquire DB connection: {e}"))?;
-
+    /// Load the complete PotBonus state using an existing connection/transaction.
+    pub async fn load_tx(&self, conn: &mut sqlx::PgConnection) -> Result<PotBonus, String> {
         // 1. Fetch global pool points
         let state_row = sqlx::query("SELECT pool_points FROM pot_bonus_state WHERE id = 1")
             .fetch_optional(&mut *conn)
@@ -118,13 +110,12 @@ impl PotBonusRepository for PgPotBonusRepository {
         })
     }
 
-    async fn save(&self, pot_bonus: &PotBonus) -> Result<(), String> {
-        let mut tx = self
-            .pool
-            .begin()
-            .await
-            .map_err(|e| format!("Failed to begin transaction: {e}"))?;
-
+    /// Save the complete PotBonus state using an existing connection/transaction.
+    pub async fn save_tx(
+        &self,
+        conn: &mut sqlx::PgConnection,
+        pot_bonus: &PotBonus,
+    ) -> Result<(), String> {
         // 1. Upsert global state
         sqlx::query(
             "INSERT INTO pot_bonus_state (id, pool_points) \
@@ -132,7 +123,7 @@ impl PotBonusRepository for PgPotBonusRepository {
              ON CONFLICT (id) DO UPDATE SET pool_points = EXCLUDED.pool_points, updated_at = NOW()",
         )
         .bind(pot_bonus.pool_points as i32)
-        .execute(&mut *tx)
+        .execute(&mut *conn)
         .await
         .map_err(|e| format!("Failed to upsert state: {e}"))?;
 
@@ -145,19 +136,19 @@ impl PotBonusRepository for PgPotBonusRepository {
             )
             .bind(acct)
             .bind(user)
-            .execute(&mut *tx)
+            .execute(&mut *conn)
             .await
             .map_err(|e| format!("Failed to insert registration: {e}"))?;
         }
 
         // 3. Clear existing weekly graduations and cycles
         sqlx::query("DELETE FROM pot_bonus_weekly_graduations")
-            .execute(&mut *tx)
+            .execute(&mut *conn)
             .await
             .map_err(|e| format!("Failed to clear weekly graduations: {e}"))?;
 
         sqlx::query("DELETE FROM pot_bonus_weekly_cycles")
-            .execute(&mut *tx)
+            .execute(&mut *conn)
             .await
             .map_err(|e| format!("Failed to clear weekly cycles: {e}"))?;
 
@@ -171,7 +162,7 @@ impl PotBonusRepository for PgPotBonusRepository {
                 )
                 .bind(acct)
                 .bind(q.user_id)
-                .execute(&mut *tx)
+                .execute(&mut *conn)
                 .await
                 .map_err(|e| format!("Failed to insert graduation record: {e}"))?;
             }
@@ -188,16 +179,66 @@ impl PotBonusRepository for PgPotBonusRepository {
                 .bind(cycle.account_id)
                 .bind(cycle.matrix_id)
                 .bind(q.user_id)
-                .execute(&mut *tx)
+                .execute(&mut *conn)
                 .await
                 .map_err(|e| format!("Failed to insert cycle record: {e}"))?;
             }
         }
 
+        Ok(())
+    }
+
+    /// Process a matrix cycle event inside an existing transaction.
+    pub async fn handle_matrix_cycled_tx(
+        &self,
+        conn: &mut sqlx::PgConnection,
+        account_id: Uuid,
+        matrix_id: Uuid,
+    ) -> Result<(), String> {
+        let mut pot_bonus = self.load_tx(conn).await?;
+        if pot_bonus.tracker.account_to_user.contains_key(&account_id) {
+            pot_bonus.record_matrix_cycle(account_id, matrix_id)?;
+            self.save_tx(conn, &pot_bonus).await?;
+        }
+        Ok(())
+    }
+
+    /// Process a flushline graduation event inside an existing transaction.
+    pub async fn handle_flushline_graduated_tx(
+        &self,
+        conn: &mut sqlx::PgConnection,
+        account_id: Uuid,
+    ) -> Result<(), String> {
+        let mut pot_bonus = self.load_tx(conn).await?;
+        if pot_bonus.tracker.account_to_user.contains_key(&account_id) {
+            pot_bonus.record_graduation(account_id)?;
+            self.save_tx(conn, &pot_bonus).await?;
+        }
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl PotBonusRepository for PgPotBonusRepository {
+    async fn load(&self) -> Result<PotBonus, String> {
+        let mut conn = self
+            .pool
+            .acquire()
+            .await
+            .map_err(|e| format!("Failed to acquire DB connection: {e}"))?;
+        self.load_tx(&mut conn).await
+    }
+
+    async fn save(&self, pot_bonus: &PotBonus) -> Result<(), String> {
+        let mut tx = self
+            .pool
+            .begin()
+            .await
+            .map_err(|e| format!("Failed to begin transaction: {e}"))?;
+        self.save_tx(&mut tx, pot_bonus).await?;
         tx.commit()
             .await
             .map_err(|e| format!("Failed to commit transaction: {e}"))?;
-
         Ok(())
     }
 }
